@@ -1,5 +1,7 @@
 ######################################################################
 #
-# PirateBox implementation for Nokia N900
+# PirateBox implementation for Nokia N900 with Shoutbox
 #
+# PirateBox project created by David Darts http://wiki.daviddarts.com/PirateBox
+# The shoutbox is based on JWC's PyShoutOut http://jwcxz.com/projects/pyshoutout/
 #
