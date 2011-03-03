@@ -1,0 +1,117 @@
+#!/bin/sh
+
+check_if_connected () {
+   IP=$(ifconfig wlan0|grep 'inet addr:'|grep -v '127.0.0.1'|grep -v '::1'|cut -d: -f2|awk '{print $1}')
+   if [ ! -z $IP ]; then 
+      echo -e "You must disconnect the interface before run PirateBox in stand alone mode\nClosing..."
+      sleep 5
+      exit
+   fi
+}
+
+iptables_rule () {
+   IP=$(ifconfig wlan0|grep 'inet addr:'|grep -v '127.0.0.1'|grep -v '::1'|cut -d: -f2|awk '{print $1}')
+   iptables -t nat -F
+   iptables -t nat -A PREROUTING -i wlan0 --protocol tcp --match tcp --destination-port 80 -j DNAT --to-destination $IP:80
+}
+
+network_setup () {
+   ifconfig wlan0 down
+   iwconfig wlan0 mode ad-hoc
+   ifconfig wlan0 up
+   iwconfig wlan0 essid "PirateBox-Free-Sharing"
+   iwconfig wlan0 channel 1
+   ifconfig wlan0 172.16.1.1 netmask 255.255.255.0 up
+}
+
+dnsmasq_with_dhcp () {
+   /usr/sbin/dnsmasq -i wlan0 -a 172.16.1.1 --address=/#/172.16.1.1 -I lo -z --dhcp-range=172.16.1.2,172.16.1.254,6h
+}
+
+dnsmasq_only_dns () {
+   IP=$(ifconfig wlan0|grep 'inet addr:'|grep -v '127.0.0.1'|grep -v '::1'|cut -d: -f2|awk '{print $1}')
+   if [ -z $IP ]; then
+      echo "The interface has no ip address.Are you connected?"
+      sleep 2
+      exit
+   fi
+   /usr/sbin/dnsmasq -i wlan0 --address=/#/$IP -z
+}
+
+restore_network () { 
+   dnsmasq_pid=$(pidof dnsmasq)
+   echo "Removing iptables nat rule"
+   iptables -t nat -F
+   echo "Closing ad-hoc network"
+   ifconfig wlan0 down
+   iwconfig wlan0 mode managed
+   ifconfig wlan0 up
+   ifconfig wlan0 192.168.1.10 netmask 255.255.255.0
+   ifconfig wlan0 down
+   echo "Stopping dnsmasq"
+   kill $dnsmasq_pid
+   echo "Closing PirateBox"
+   sleep 2
+}
+
+lf=/tmp/pidLockFile
+touch $lf
+read lastPID < $lf
+
+if [ ! -z "$lastPID" -a -d /proc/$lastPID ]; then
+   zenity --error --text "Already running!" 
+   exit
+else
+   echo $$ > $lf
+   choice=$(zenity --list --text "Run in:" --title "Start PirateBox" --radiolist --column "Select " --column "Mode" TRUE "Stand-Alone mode (Setup ad-hoc network)" FALSE "Router mode (N900 connected to a router)");
+
+   if [ "$choice" = "Stand-Alone mode (Setup ad-hoc network)" ]; then
+      check_if_connected
+      network_setup
+      echo "ad-hoc network OK"
+      iptables_rule
+      echo "nat OK"
+      dnsmasq_with_dhcp
+      echo "dnsmasq OK"
+      /home/user/.piratebox/bin/droopy -m "Free Sharing" -p /home/user/.piratebox/src/piratebox-logo.png -d /home/user/MyDocs/piratebox 2>/home/user/.piratebox/logs/general_logs &
+      DROOPY_PID="$!" 
+      cd /home/user/MyDocs/piratebox; 
+      /home/user/.piratebox/bin/webserver.py 2>/home/user/.piratebox/logs/downloads_logs &
+      SIMPLESERVER_PID="$!"
+      cd /home/user/.piratebox/chat; 
+      /home/user/.piratebox/chat/pirateboxchat_start.py 2>/home/user/.piratebox/logs/chat_logs & 
+      CHAT_PID="$!"     
+      sleep 3
+      echo -e "\nType stop + enter to close"   
+      while [ "$c" != "stop" ]
+      do
+        echo -e "\nType stop + enter to close" 
+        read c
+      done
+      kill "$DROOPY_PID" "$SIMPLESERVER_PID" "$CHAT_PID"
+      restore_network
+      exit
+   elif [ "$choice" = "Router mode (N900 connected to a router)" ]; then
+      iptables_rule
+      echo "nat OK"
+      dnsmasq_only_dns
+      echo "dnsmasq OK"
+      /home/user/.piratebox/bin/droopy -m "Free Sharing" -p /home/user/.piratebox/src/piratebox-logo.png -d /home/user/MyDocs/piratebox 2>/home/user/.piratebox/logs/general_logs &
+      DROOPY_PID="$!" 
+      cd /home/user/MyDocs/piratebox; 
+      /home/user/.piratebox/bin/webserver.py 2>/home/user/.piratebox/logs/downloads_logs &
+      SIMPLESERVER_PID="$!"
+      cd /home/user/.piratebox/chat; 
+      /home/user/.piratebox/chat/pirateboxchat_start.py 2>/home/user/.piratebox/logs/chat_logs & 
+      CHAT_PID="$!"
+      sleep 3
+      echo -e "\nType stop + enter to close"
+      while [ "$c" != "stop" ]
+      do
+        echo -e "\nType stop + enter to close"
+        read c
+      done
+      kill "$DROOPY_PID" "$SIMPLESERVER_PID" "$CHAT_PID"
+      exit
+   fi
+fi
