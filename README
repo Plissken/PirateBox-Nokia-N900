@@ -3,5 +3,6 @@
 # PirateBox implementation for Nokia N900 with Shoutbox
 #
 # PirateBox project created by David Darts http://wiki.daviddarts.com/PirateBox
+# Based on Droopy http://stackp.online.fr/droopy
 # The shoutbox is based on JWC's PyShoutOut http://jwcxz.com/projects/pyshoutout/
 #
